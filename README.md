@@ -2,10 +2,10 @@
 
 ---
 
-### **NAME:**  
-### **DEPARTMENT:**  
-### **ROLL NO:**  
-### **DATE OF EXPERIMENT:**  
+### **NAME:DHARANYA N**  
+### **DEPARTMENT:B TECH AI-DS**  
+### **ROLL NO:212223230044**  
+### **DATE OF EXPERIMENT:19.05.2026**  
 
 ---
 
@@ -70,43 +70,253 @@ Connect the Rain Sensor (LM393) D0 to any one GPIO.
 Experiment 3A
 ## PROGRAM (Python)
 ```
+import time
+import board
+import digitalio
+import busio
+import json
+import ssl
 
+from adafruit_mcp3xxx.mcp3008 import MCP3008
+from adafruit_mcp3xxx.analog_in import AnalogIn
+import adafruit_mcp3xxx.mcp3008 as MCP
 
- 
+from PIL import Image, ImageDraw, ImageFont
+import adafruit_ssd1306
 
+import paho.mqtt.client as mqtt
 
+# ---------------- MQTT CONFIG ----------------
+BROKER = "d90b5982873b46c58f7413983e806c3e.s1.eu.hivemq.cloud"
+PORT = 8883
+USERNAME = "hivemq.webclient.1777442557358"
+PASSWORD = "I<2k6gB5!xcd;A8QF>Nt"
+TOPIC = "raspi/temperature"
 
+# MQTT Setup
+client = mqtt.Client()
+client.username_pw_set(USERNAME, PASSWORD)
+client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+
+client.connect(BROKER, PORT)
+client.loop_start()
+
+# ---------------- OLED SETUP ----------------
+RESET_PIN = digitalio.DigitalInOut(board.D4)
+i2c = board.I2C()
+oled = adafruit_ssd1306.SSD1306_I2C(128, 64, i2c, addr=0x3C, reset=RESET_PIN)
+
+# ---------------- SPI + MCP3008 ----------------
+spi = busio.SPI(clock=board.SCK, MISO=board.MISO, MOSI=board.MOSI)
+cs = digitalio.DigitalInOut(board.D8)
+mcp = MCP.MCP3008(spi, cs)
+
+chan3 = AnalogIn(mcp, MCP.P3)
+
+# ---------------- FUNCTION ----------------
+def LM35():
+    try:
+        voltage = chan3.voltage
+        temp = (voltage * 330 / 1024) * 100
+
+        print("Temperature:", temp)
+
+        # OLED Display
+        oled.fill(0)
+        image = Image.new("1", (oled.width, oled.height))
+        draw = ImageDraw.Draw(image)
+
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16
+        )
+
+        draw.text((0, 10), "LM35 Sensor", font=font, fill=255)
+        draw.text((0, 30), f"Temp: {temp:.2f} C", font=font, fill=255)
+
+        oled.image(image)
+        oled.show()
+
+        # MQTT Publish
+        payload = json.dumps({"temperature": temp})
+        client.publish(TOPIC, payload)
+
+        print("Published to HiveMQ:", payload)
+
+    except Exception as e:
+        print("Error:", e)
+
+# ---------------- LOOP ----------------
+while True:
+    LM35()
+    time.sleep(20)
  
 ````
 
-### OUPUT  
+### OUTPUT  
 
 
-# FIGURE -04 ADD TITILE HERE 
 
-#  FIGURE -05 ADD TITILE HERE 
+# FIGURE -04
+<img width="1599" height="899" alt="image" src="https://github.com/user-attachments/assets/235eead4-dd40-4f7a-ac91-d224d251d91b" />
 
-# FIGURE -06 ADD TITLE HERE 
+#  FIGURE -05 
+<img width="1600" height="840" alt="image" src="https://github.com/user-attachments/assets/ca763b5b-7d5c-48b8-a8bc-7aa243321dcf" />
+
+# FIGURE -06 
+<img width="592" height="410" alt="image" src="https://github.com/user-attachments/assets/884f423b-8537-4632-b5cc-d3de42df3ddf" />
 
 Experiment 3B
 ## PROGRAM (Python)
 ```
+import time
+import ssl
+import json
+import RPi.GPIO as GPIO
+import board
+from PIL import Image, ImageDraw, ImageFont
+import adafruit_ssd1306
+import paho.mqtt.client as mqtt
 
+# ---------------- GPIO SETUP ----------------
 
- 
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
 
+RAIN_SENSOR_PIN = 18
 
+GPIO.setup(RAIN_SENSOR_PIN, GPIO.IN)
+
+# ---------------- OLED SETUP ----------------
+
+i2c = board.I2C()
+
+oled = adafruit_ssd1306.SSD1306_I2C(
+    128,
+    64,
+    i2c,
+    addr=0x3C
+)
+
+font = ImageFont.truetype(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    16
+)
+
+# ---------------- MQTT SETUP ----------------
+
+MQTT_BROKER = "d90b5982873b46c58f7413983e806c3e.s1.eu.hivemq.cloud"
+MQTT_PORT = 8883
+MQTT_USER = "hivemq.webclient.1779179026707"
+MQTT_PASSWORD = "2mtq1BSRv:*0LFkl3.;W"
+
+MQTT_TOPIC = "raspberrypi/rain"
+
+client = mqtt.Client()
+
+client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+
+client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+
+print("Connecting to HiveMQ Cloud...")
+
+client.connect(MQTT_BROKER, MQTT_PORT)
+
+client.loop_start()
+
+print("MQTT Connected Successfully")
+
+# ---------------- OLED DISPLAY ----------------
+
+def display_status(status_text, raw_value):
+
+    oled.fill(0)
+
+    image = Image.new("1", (oled.width, oled.height))
+    draw = ImageDraw.Draw(image)
+
+    draw.text((0, 0), "Rain Sensor", font=font, fill=255)
+    draw.text((0, 25), status_text, font=font, fill=255)
+    draw.text((0, 50), "Value:" + str(raw_value), font=font, fill=255)
+
+    oled.image(image)
+    oled.show()
+
+# ---------------- MAIN LOOP ----------------
+
+try:
+
+    while True:
+
+        rain_value = GPIO.input(RAIN_SENSOR_PIN)
+
+        print("Raw Sensor Value =", rain_value)
+
+        # CHECK SENSOR LOGIC
+        # After potentiometer adjustment:
+        # Wet  -> 0
+        # Dry  -> 1
+
+        if rain_value == 0:
+
+            status = "RAIN DETECTED"
+            rain_status = 1
+
+        else:
+
+            status = "NO RAIN"
+            rain_status = 0
+
+        print("Status =", status)
+
+        # OLED Display
+        display_status(status, rain_value)
+
+        # MQTT Payload
+        payload = {
+            "rain_status": rain_status,
+            "raw_value": rain_value,
+            "message": status
+        }
+
+        # Publish MQTT
+        client.publish(
+            MQTT_TOPIC,
+            json.dumps(payload)
+        )
+
+        print("MQTT Data Published")
+        print("----------------------")
+
+        time.sleep(2)
+
+except KeyboardInterrupt:
+
+    print("Program Stopped")
+
+    oled.fill(0)
+    oled.show()
+
+    GPIO.cleanup()
+
+    client.loop_stop()
+    client.disconnect()
 
  
 ````
 
-### OUPUT  
+### OUTPUT  
 
-# FIGURE -07 ADD TITILE HERE 
+# FIGURE -07 
+<img width="429" height="525" alt="image" src="https://github.com/user-attachments/assets/f3cac865-d457-4885-9026-72003df482d9" />
 
-#  FIGURE -08 ADD TITILE HERE 
+#  FIGURE -08 
+<img width="1157" height="602" alt="image" src="https://github.com/user-attachments/assets/7db64cfa-d0a9-4441-aef2-bc5871d36689" />
 
-# FIGURE -09 ADD TITLE HERE 
+<img width="1157" height="602" alt="image" src="https://github.com/user-attachments/assets/b7a61f50-09da-4535-8490-ce6fb9d33ced" />
+
+
+# FIGURE -09 
+<img width="576" height="370" alt="image" src="https://github.com/user-attachments/assets/d6dbce42-b169-45e9-b416-885b681331e9" />
 
 
 
